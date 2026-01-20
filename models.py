@@ -5,8 +5,9 @@ from sqlalchemy import String
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import relationship,sessionmaker
+from sqlalchemy.orm import relationship,Session
 from datetime import datetime
+
 
 from sqlalchemy import create_engine
 DATABASE_URL='postgresql://postgres:Nazo@localhost:5432/flaskapi'
@@ -16,11 +17,12 @@ engine = create_engine(
     DATABASE_URL
 )
 
-SessionLocal = sessionmaker(
+SessionLocal = Session(
     autocommit=False,
     autoflush=False,
     bind=engine
 )
+
 
 class Base(DeclarativeBase):
      pass
@@ -45,3 +47,5 @@ class Sale(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
     product: Mapped["Product"] = relationship(back_populates="sales")
+
+
