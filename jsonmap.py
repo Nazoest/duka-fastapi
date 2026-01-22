@@ -1,5 +1,14 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
+
+class UserPostRegister(BaseModel):
+    email: str
+    username: str | None = None
+    password: str
+
+class UserPostLogin(BaseModel):
+    email: str
+    password: str
 
 class ProductPostMap(BaseModel):
     name: str
@@ -15,7 +24,10 @@ class SalePostMap(BaseModel):
     quantity: int
 
 class SaleGetMap(SalePostMap):
+    #name: str
     id: int
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
  

@@ -27,6 +27,14 @@ SessionLocal = Session(
 class Base(DeclarativeBase):
      pass
 
+class User(Base):
+    __tablename__ = "fastapiusers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    username: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    password: Mapped[str] = mapped_column(String(100), nullable=False)
+
 class Product(Base):
     __tablename__ = "products"
 
