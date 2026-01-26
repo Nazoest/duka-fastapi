@@ -1,10 +1,18 @@
-from typing import Union, List
+from typing import Union, List, Annotated
 from fastapi import FastAPI, Depends,HTTPException, status
 from sqlalchemy.orm import Session,selectinload
 from models import Base,engine,SessionLocal
 from sqlalchemy import select
 from jsonmap import ProductGetMap, ProductPostMap, SaleGetMap, SalePostMap, UserPostRegister, UserPostLogin
 from models import Product,Sale,User
+from myjwt import create_access_token, authenticate_user,get_password_hash,verify_password
+from datetime import timedelta
+from jsonmap import Token
+from fastapi.security import (
+    OAuth2PasswordBearer,
+    OAuth2PasswordRequestForm,
+    SecurityScopes,
+)
 
 
 app = FastAPI()
@@ -28,26 +36,39 @@ def register_user(user: UserPostRegister):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
+    hashed_password=get_password_hash(user.password)
     model_obj=User(
         email=user.email,
         username=user.username,
-        password=user.password
+        password=hashed_password
     )
     SessionLocal.add(model_obj)
     SessionLocal.commit()
     return model_obj
 
-@app.post("/login",response_model=UserPostLogin)
-def login_user(user: UserPostLogin):
-    db_user=SessionLocal.execute(
-    select(User).where(User.email==user.email, User.password==user.password)
-    ).scalar_one_or_none()
-    if not db_user:
+@app.post("/login", response_model=Token)
+def login_user(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+):
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
-    return db_user
+
+    access_token_expires = timedelta(minutes=30)
+    access_token = create_access_token(
+        data={
+            "sub": user.email,
+            "scope": " ".join(form_data.scopes),
+        },
+        expires_delta=access_token_expires,
+    )
+
+    return Token(access_token=access_token, token_type="bearer")
+
+
    
 
 @app.get("/products", response_model=List[ProductGetMap])
