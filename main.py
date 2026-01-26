@@ -27,24 +27,44 @@ def create_tables():
 def read_root():
     return {"Duka FastAPI": "Version 1.0"}
 
-@app.post("/register",response_model=UserPostRegister)
+@app.post("/register", response_model=Token)
 def register_user(user: UserPostRegister):
+    # Check if email is already registered
     if SessionLocal.execute(
-        select(User).where(User.email==user.email)
+        select(User).where(User.email == user.email)
     ).scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
-    hashed_password=get_password_hash(user.password)
-    model_obj=User(
+
+    # Hash the password
+    hashed_password = get_password_hash(user.password)
+
+    # Create User model object
+    model_obj = User(
         email=user.email,
         username=user.username,
         password=hashed_password
     )
+
+    # Save to database
     SessionLocal.add(model_obj)
     SessionLocal.commit()
-    return model_obj
+
+    # Create access token (default scopes empty)
+    ACCESS_TOKEN_EXPIRE_MINUTES = 30
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={
+            "sub": user.email,  # store email in JWT
+            "scope": "",        # default scopes
+        },
+        expires_delta=access_token_expires
+    )
+
+    # Return the token
+    return Token(access_token=access_token, token_type="bearer")
 
 @app.post("/login", response_model=Token)
 def login_user(
