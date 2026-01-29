@@ -44,7 +44,7 @@ def register_user(user: UserPostRegister):
     # Create User model object
     model_obj = User(
         email=user.email,
-        username=user.username,
+        fullname=user.fullname,
         password=hashed_password
     )
 
@@ -67,10 +67,8 @@ def register_user(user: UserPostRegister):
     return Token(access_token=access_token, token_type="bearer")
 
 @app.post("/login", response_model=Token)
-def login_user(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
-):
-    user = authenticate_user(form_data.username, form_data.password)
+def login_user(user:UserPostLogin):
+    user = authenticate_user(user.email, user.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -81,7 +79,7 @@ def login_user(
     access_token = create_access_token(
         data={
             "sub": user.email,
-            "scope": " ".join(form_data.scopes),
+            #"scope": " ".join(form_data.scopes),
         },
         expires_delta=access_token_expires,
     )

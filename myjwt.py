@@ -12,6 +12,7 @@ from fastapi.security import (
     OAuth2PasswordBearer,
     OAuth2PasswordRequestForm,
     SecurityScopes,
+    HTTPBearer
 )
 #from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
@@ -91,9 +92,9 @@ async def get_current_user(
         scope: str = payload.get("scope", "")
         token_scopes = scope.split(" ")
         token_data = TokenData(scopes=token_scopes, username=username)
-    except (InvalidTokenError, ValidationError):
+    except Exception:
         raise credentials_exception
-    user = get_user(fake_users_db, username=token_data.username)
+    user = get_user(username=token_data.email)
     if user is None:
         raise credentials_exception
     for scope in security_scopes.scopes:
