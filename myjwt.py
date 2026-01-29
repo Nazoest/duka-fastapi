@@ -14,6 +14,9 @@ from fastapi.security import (
     SecurityScopes,
     HTTPBearer
 )
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+bearer_scheme = HTTPBearer()
 #from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
 ALGORITHM = "HS256"
@@ -22,11 +25,13 @@ ALGORITHM = "HS256"
 password_hash = PasswordHash.recommended()
 SECRET_KEY = "3q45wgte67u8l;0-i'[plokiujnyhbtgvrfdefrghtyulkoiujyhtgrfd]"
 
-oauth2_scheme = OAuth2PasswordBearer(
+""" oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="token",
     scopes={"me": "Read information about the current user.", "items": "Read items."},
 )
+ """
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 def verify_password(plain_password, hashed_password):
     return password_hash.verify(plain_password, hashed_password)
@@ -71,7 +76,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-
+""" 
 async def get_current_user(
     security_scopes: SecurityScopes, token: Annotated[str, Depends(oauth2_scheme)]
 ):
@@ -94,7 +99,7 @@ async def get_current_user(
         token_data = TokenData(scopes=token_scopes, username=username)
     except Exception:
         raise credentials_exception
-    user = get_user(username=token_data.email)
+    user = get_user(email=token_data.email)
     if user is None:
         raise credentials_exception
     for scope in security_scopes.scopes:
@@ -104,7 +109,27 @@ async def get_current_user(
                 detail="Not enough permissions",
                 headers={"WWW-Authenticate": authenticate_value},
             )
+    return user """
+
+def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)]
+):
+    token = credentials.credentials  # <-- RAW token from Swagger
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user = get_user(email=email)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+
     return user
+
 
 
 async def get_current_active_user(

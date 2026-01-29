@@ -5,7 +5,7 @@ from models import Base,engine,SessionLocal
 from sqlalchemy import select
 from jsonmap import ProductGetMap, ProductPostMap, SaleGetMap, SalePostMap, UserPostRegister, UserPostLogin
 from models import Product,Sale,User
-from myjwt import create_access_token, authenticate_user,get_password_hash,verify_password
+from myjwt import create_access_token, authenticate_user, get_current_user,get_password_hash,verify_password
 from datetime import timedelta
 from jsonmap import Token
 from fastapi.security import (
@@ -13,7 +13,12 @@ from fastapi.security import (
     OAuth2PasswordRequestForm,
     SecurityScopes,
 )
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+bearer_scheme = HTTPBearer()
+
+#from fastapi.security import OAuth2PasswordBearer
+#oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 app = FastAPI()
 
@@ -26,6 +31,19 @@ def create_tables():
 @app.get("/")
 def read_root():
     return {"Duka FastAPI": "Version 1.0"}
+
+# ---------------- LOGIN (OAUTH2 – SWAGGER) ----------------
+@app.post("/token", tags=["auth"])
+def login_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.email, form_data.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = create_access_token(user.email)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+    }
 
 @app.post("/register", response_model=Token)
 def register_user(user: UserPostRegister):
@@ -87,12 +105,16 @@ def login_user(user:UserPostLogin):
     return Token(access_token=access_token, token_type="bearer")
 
 
-   
-
 @app.get("/products", response_model=List[ProductGetMap])
-def get_products():
+def get_products(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    print(f"Current user--------------------------: {current_user.email}")
     products=select(Product)
+
     return SessionLocal.scalars(products)
+ 
+
 
 @app.post("/products", response_model=ProductGetMap)
 def create_product(json_product_obj: ProductPostMap):
@@ -108,9 +130,12 @@ def create_product(json_product_obj: ProductPostMap):
     
 
 @app.get("/sales",response_model=List[SaleGetMap])
-def get_sales():
+def get_sales(
+     current_user: Annotated[User, Depends(get_current_user)]
+):
     sales=select(Sale).options(selectinload(Sale.product))
     return SessionLocal.scalars(sales).all()
+
 
 @app.post("/sales", response_model=SaleGetMap)
 def create_sale(json_sale_obj: SalePostMap):
