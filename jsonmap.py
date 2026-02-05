@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
@@ -16,6 +17,14 @@ class ProductPostMap(BaseModel):
     selling_price: float
 
 class ProductGetMap(ProductPostMap):
+    id: int
+
+class PurchasePostMap(BaseModel):
+    product_id: int
+    stock_quantity: int
+    created_at: datetime
+
+class PurchaseGetMap(PurchasePostMap):
     id: int
 
  
@@ -41,3 +50,28 @@ class TokenData(BaseModel):
 
 
  
+class SalesPerProduct(BaseModel):
+    product_id: int
+    product_name: str
+    total_quantity_sold: int
+    total_sales_amount: float
+
+class StockPerProduct(BaseModel):
+    product_id: int
+    product_name: str
+    remaining_stock: int
+
+class  ProfitPerProduct(BaseModel):
+    product_id: int
+    product_name: str
+    total_profit: float
+
+class ProfitPerDay(BaseModel):
+    date: datetime
+    total_profit: float
+
+class ProfitPerProductPerDay(BaseModel):
+    date: datetime
+    product_id: int
+    product_name: str
+    total_profit: float
