@@ -5,22 +5,25 @@ from models import Base, Purchase,engine,SessionLocal
 from sqlalchemy import func, select
 from jsonmap import ProductGetMap, ProductPostMap, PurchaseGetMap, PurchasePostMap, SaleGetMap, SalePostMap, SalesPerProduct, UserPostRegister, UserPostLogin,StockPerProduct,ProfitPerProduct,ProfitPerDay,ProfitPerProductPerDay
 from models import Product,Sale,User
-from myjwt import create_access_token, authenticate_user, get_current_user,get_password_hash,verify_password
+from myjwt import create_access_token, authenticate_user, get_current_user,get_password_hash
 from datetime import timedelta
 from jsonmap import Token
 from fastapi.security import (
-    OAuth2PasswordBearer,
     OAuth2PasswordRequestForm,
-    SecurityScopes,
 )
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
-bearer_scheme = HTTPBearer()
-
-#from fastapi.security import OAuth2PasswordBearer
-#oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # for dev ONLY
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # Create tables on startup
 @app.on_event("startup")
@@ -58,7 +61,6 @@ def register_user(user: UserPostRegister):
 
     # Hash the password
     hashed_password = get_password_hash(user.password)
-
     # Create User model object
     model_obj = User(
         email=user.email,
@@ -109,7 +111,6 @@ def login_user(user:UserPostLogin):
 def get_products(
     current_user: Annotated[User, Depends(get_current_user)]
 ):
-    print(f"Current user--------------------------: {current_user.email}")
     products=select(Product)
 
     return SessionLocal.scalars(products)
@@ -166,15 +167,6 @@ def create_purchase(json_purchase_obj: PurchasePostMap):
     SessionLocal.add(model_obj)
     SessionLocal.commit()
     return model_obj
-
-""" @app.get("/dashboard/spp/{product_id}",response_model=List[SaleGetMap])
-def get_sales_by_product(
-    product_id: int,
-     current_user: Annotated[User, Depends(get_current_user)]
-):
-    sales=select(Sale).where(Sale.product_id==product_id).options(selectinload(Sale.product))
-    return SessionLocal.scalars(sales).all()
- """
 
 @app.get("/dashboard/spp",response_model=List[SalesPerProduct])
 def get_sales_per_product(
