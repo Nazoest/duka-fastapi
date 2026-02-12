@@ -168,7 +168,7 @@ def create_purchase(json_purchase_obj: PurchasePostMap):
     SessionLocal.commit()
     return model_obj
 
-@app.get("/dashboard/spp",response_model=List[SalesPerProduct])
+@app.get("/dashboard/spp",response_model=SalesPerProduct)
 def get_sales_per_product(
      current_user: Annotated[User, Depends(get_current_user)]
 ):
@@ -181,18 +181,12 @@ def get_sales_per_product(
         ).join(Product, Sale.product_id == Product.id
         ).group_by(Sale.product_id, Product.name)
     ).all()
+    data = [r.total_quantity_sold for r in sales_data]
+    labels = [r.product_name for r in sales_data]
 
-    result = [
-        SalesPerProduct(
-            product_id=row.product_id,
-            product_name=row.product_name,
-            total_quantity_sold=row.total_quantity_sold,
-            total_sales_amount=row.total_sales_amount
-        )
-        for row in sales_data
-    ]
-
-    return result
+    return SalesPerProduct(
+            data=data,
+            labels=labels)
 
 @app.get("/dashboard/rspp",response_model=List[StockPerProduct])
 def get_stock_per_product(
