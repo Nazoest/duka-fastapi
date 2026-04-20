@@ -4,7 +4,7 @@ from models import User, SessionLocal
 from jsonmap import TokenData
 from sqlalchemy import select
 from jose import JWTError, jwt
-from fastapi import Depends, FastAPI, HTTPException, Security, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
 from fastapi.security import (
     HTTPBearer
 )
@@ -53,27 +53,42 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-
-
 def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)]
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)] = None
 ):
-    token = credentials.credentials  # <-- RAW token from Swagger
+    token = None
+
+    # 1. Try header first
+    if credentials:
+        token = credentials.credentials
+
+    # 2. Fallback to cookie
+    if not token:
+        token = request.cookies.get("access_token")
+
+        if token and token.startswith("Bearer "):
+            token = token.split(" ")[1]
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
+
         if email is None:
             raise HTTPException(status_code=401, detail="Invalid token")
+
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user = get_user(email=email)
+
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
 
     return user
-
 
 
 async def get_current_active_user(

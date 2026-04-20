@@ -1,10 +1,10 @@
 from typing import Union, List, Annotated
-from fastapi import FastAPI, Depends,HTTPException, status
+from fastapi import FastAPI, Depends,HTTPException, status,Response
 from sqlalchemy.orm import Session,selectinload
 from models import Base, Purchase,engine,SessionLocal
 from sqlalchemy import func, select
-from jsonmap import ProductGetMap, ProductPostMap, PurchaseGetMap, PurchasePostMap, SaleGetMap, SalePostMap, SalesPerProduct, UserPostRegister, UserPostLogin,StockPerProduct,ProfitPerProduct,ProfitPerDay,ProfitPerProductPerDay
-from models import Product,Sale,User
+from jsonmap import ProductGetMap, ProductPostMap, PurchaseGetMap, PurchasePostMap, SaleGetMap, SalePostMap, SalesPerProduct, UserPostRegister, UserPostLogin,StockPerProduct,ProfitPerProduct,ProfitPerDay,ProfitPerProductPerDay,PaymentGetMap
+from models import Product,Sale,User, Payment
 from myjwt import create_access_token, authenticate_user, get_current_user,get_password_hash
 from datetime import timedelta
 from jsonmap import Token
@@ -12,13 +12,15 @@ from fastapi.security import (
     OAuth2PasswordRequestForm,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from mpesa import make_stk_push
+
 
 app = FastAPI()
 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # for dev ONLY
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # for dev ONLY
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,15 +40,17 @@ def read_root():
 # ---------------- LOGIN (OAUTH2 – SWAGGER) ----------------
 @app.post("/token", tags=["auth"])
 def login_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(form_data.email, form_data.password)
+    user = authenticate_user(form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = create_access_token(user.email)
+    token = create_access_token(data={"sub": user.email})
     return {
         "access_token": token,
         "token_type": "bearer",
     }
+
+
 
 @app.post("/register", response_model=Token)
 def register_user(user: UserPostRegister):
@@ -87,7 +91,7 @@ def register_user(user: UserPostRegister):
     return Token(access_token=access_token, token_type="bearer")
 
 @app.post("/login", response_model=Token)
-def login_user(user:UserPostLogin):
+def login_user(user:UserPostLogin,response: Response):
     user = authenticate_user(user.email, user.password)
     if not user:
         raise HTTPException(
@@ -99,17 +103,35 @@ def login_user(user:UserPostLogin):
     access_token = create_access_token(
         data={
             "sub": user.email,
-            #"scope": " ".join(form_data.scopes),
+            #"scope": " ".join(form.scopes),
         },
         expires_delta=access_token_expires,
     )
-
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+       # expires=access_token_expires,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+    ) 
     return Token(access_token=access_token, token_type="bearer")
 
+@app.get("/me")
+def read_me(current_user: User = Depends(get_current_user)):
+    print("Called /me endpoint")
+    return {
+        "email": current_user.email,
+    }
+
+@app.post("/logout")
+def logout_user(response: Response):
+    response.delete_cookie(key="access_token",httponly=True,secure=False,samesite="lax")
+    return {"message": "Logged out successfully"}
 
 @app.get("/products", response_model=List[ProductGetMap])
 def get_products(
-    current_user: Annotated[User, Depends(get_current_user)]
+    # current_user: Annotated[User, Depends(get_current_user)]
 ):
     products=select(Product)
 
@@ -132,7 +154,7 @@ def create_product(json_product_obj: ProductPostMap):
 
 @app.get("/sales",response_model=List[SaleGetMap])
 def get_sales(
-     current_user: Annotated[User, Depends(get_current_user)]
+     #current_user: Annotated[User, Depends(get_current_user)]
 ):
     sales=select(Sale).options(selectinload(Sale.product))
     return SessionLocal.scalars(sales).all()
@@ -301,3 +323,65 @@ def get_profit_per_product_per_day(
     ]
 
     return result
+
+@app.post("/stk-push")
+def stk_push(payload: dict):
+    try:
+        response_data = make_stk_push(payload)
+        
+        new_payment = Payment(
+            sale_id=int(payload['sale_id']) if payload.get('sale_id') else None,
+            trans_amount=float(payload.get('amount', 0)),
+            phone_paid=payload.get('phone_number', ''),
+            mrid=response_data.get('MerchantRequestID'),
+            crid=response_data.get('CheckoutRequestID'),
+            status="pending"
+        )
+        SessionLocal.add(new_payment)
+        SessionLocal.commit()
+
+        return {"message": "STK Push initiated", "response": response_data}
+    except Exception as e:
+        SessionLocal.rollback()
+        print("STK Push error: ", e)
+        return {"message": f"STK Push failed: {str(e)}"}
+    
+@app.post("/saf-callback")
+def saf_callback(payload: dict):
+    print("Received SAF callback:", payload)
+    try:
+        body = payload.get('Body', {})
+        stkCallback = body.get('stkCallback', {})
+        result_code = stkCallback.get('ResultCode')
+        
+        mrid = stkCallback.get('MerchantRequestID')
+        crid = stkCallback.get('CheckoutRequestID')
+
+        payment = SessionLocal.execute(
+            select(Payment).where(Payment.mrid == mrid, Payment.crid == crid)
+        ).scalar_one_or_none()
+
+        if payment:
+            if result_code == 0:
+                callback_metadata = stkCallback.get('CallbackMetadata', {}).get('Item', [])
+                for item in callback_metadata:
+                    if item.get('Name') == 'MpesaReceiptNumber':
+                        payment.trans_code = item.get('Value')
+                payment.status = "completed"
+            else:
+                payment.status = "failed"
+            
+            SessionLocal.commit()
+        else:
+            print(f"Payment not found for MRID: {mrid} and CRID: {crid}")
+            
+    except Exception as e:
+        print("Error processing callback:", e)
+        SessionLocal.rollback()
+
+    return {"message": "Callback received"}
+
+@app.get("/payments", response_model=List[PaymentGetMap])
+def get_payments():
+    payments = select(Payment)
+    return SessionLocal.scalars(payments).all()
