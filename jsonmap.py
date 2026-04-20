@@ -74,3 +74,16 @@ class ProfitPerProductPerDay(BaseModel):
     product_id: int
     product_name: str
     total_profit: float
+
+class PaymentGetMap(BaseModel):
+    id: int
+    sale_id: Optional[int] = None
+    mrid: Optional[str] = None
+    crid: Optional[str] = None
+    trans_code: Optional[str] = None
+    trans_amount: float
+    phone_paid: str
+    status: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

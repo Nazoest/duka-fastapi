@@ -66,3 +66,16 @@ class Purchase(Base):
 
     product: Mapped["Product"] = relationship()
 
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sale_id: Mapped[Optional[int]] = mapped_column(ForeignKey("sales.id"), nullable=True)
+    mrid: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    crid: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    trans_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    trans_amount: Mapped[float] = mapped_column(nullable=False)
+    phone_paid: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
