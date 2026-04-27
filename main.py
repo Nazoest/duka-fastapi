@@ -1,6 +1,7 @@
 from typing import Union, List, Annotated
 from fastapi import FastAPI, Depends,HTTPException, status,Response
 from sqlalchemy.orm import Session,selectinload
+from generate_pdf import generate_receipt
 from models import Base, Purchase,engine,SessionLocal
 from sqlalchemy import func, select
 from jsonmap import ProductGetMap, ProductPostMap, PurchaseGetMap, PurchasePostMap, SaleGetMap, SalePostMap, SalesPerProduct, UserPostRegister, UserPostLogin,StockPerProduct,ProfitPerProduct,ProfitPerDay,ProfitPerProductPerDay,PaymentGetMap
@@ -368,6 +369,8 @@ def saf_callback(payload: dict):
                     if item.get('Name') == 'MpesaReceiptNumber':
                         payment.trans_code = item.get('Value')
                 payment.status = "completed"
+                details = f"Payment of {payment.trans_amount} from {payment.phone_paid}\n was successful. Transaction code: {payment.trans_code} for sale ID: {payment.sale_id}\n at {payment.created_at}\n Thank you for your purchase!"
+                generate_receipt(details,payment.trans_code)
             else:
                 payment.status = "failed"
             

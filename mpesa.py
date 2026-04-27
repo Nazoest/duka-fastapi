@@ -55,7 +55,7 @@ def make_stk_push(payload):
         "PartyB": saf_short_code,
         "PhoneNumber": phone_number,
         "CallBackURL": my_callback_url,
-        "AccountReference": str(payload.get('sale_id', '1')),
+        "AccountReference": str(payload.get('sale_id')),
         "TransactionDesc": "description of the transaction",
     }
 
