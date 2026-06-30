@@ -1,9 +1,10 @@
-from typing import Union, List, Annotated
+import re
+from typing import Optional, Union, List, Annotated
 from fastapi import FastAPI, Depends,HTTPException, status,Response
 from sqlalchemy.orm import Session,selectinload
 from cloudinary_upload import upload_pdf
 from generate_pdf import generate_receipt
-from models import Base, Purchase,engine,SessionLocal
+from models import Base, Purchase,engine,get_db
 from sqlalchemy import func, select
 from jsonmap import ProductGetMap, ProductPostMap, PurchaseGetMap, PurchasePostMap, SaleGetMap, SalePostMap, SalesPerProduct, UserPostRegister, UserPostLogin,StockPerProduct,ProfitPerProduct,ProfitPerDay,ProfitPerProductPerDay,PaymentGetMap
 from models import Product,Sale,User, Payment
@@ -22,7 +23,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # for dev ONLY
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173","http://localhost:5501","http://127.0.0.1:5501","*"],  # for dev ONLY
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,9 +56,27 @@ def login_token(form_data: OAuth2PasswordRequestForm = Depends()):
 
 
 @app.post("/register", response_model=Token)
-def register_user(user: UserPostRegister):
+def register_user(user: UserPostRegister, db: Session = Depends(get_db)):
+    if not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", user.email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid email format"
+        )
+        
+    if not user.fullname or len(user.fullname.strip()) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Fullname is required"
+        )
+        
+    if len(user.password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long"
+        )
+
     # Check if email is already registered
-    if SessionLocal.execute(
+    if db.execute(
         select(User).where(User.email == user.email)
     ).scalar_one_or_none():
         raise HTTPException(
@@ -75,8 +94,8 @@ def register_user(user: UserPostRegister):
     )
 
     # Save to database
-    SessionLocal.add(model_obj)
-    SessionLocal.commit()
+    db.add(model_obj)
+    db.commit()
 
     # Create access token (default scopes empty)
     ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -133,70 +152,76 @@ def logout_user(response: Response):
 
 @app.get("/products", response_model=List[ProductGetMap])
 def get_products(
+    db: Session = Depends(get_db)
     # current_user: Annotated[User, Depends(get_current_user)]
 ):
     products=select(Product)
-
-    return SessionLocal.scalars(products)
+    return db.scalars(products).all()
  
 
 
 @app.post("/products", response_model=ProductGetMap)
-def create_product(json_product_obj: ProductPostMap):
+def create_product(json_product_obj: ProductPostMap, db: Session = Depends(get_db)):
     model_obj=Product(
         name=json_product_obj.name,
         buying_price=json_product_obj.buying_price,
         selling_price=json_product_obj.selling_price
     )
-    SessionLocal.add(model_obj)
-    SessionLocal.commit()
+    db.add(model_obj)
+    db.commit()
+    db.refresh(model_obj)
     return model_obj
 
     
 
 @app.get("/sales",response_model=List[SaleGetMap])
 def get_sales(
+    db: Session = Depends(get_db)
      #current_user: Annotated[User, Depends(get_current_user)]
 ):
     sales=select(Sale).options(selectinload(Sale.product))
-    return SessionLocal.scalars(sales).all()
+    return db.scalars(sales).all()
 
 
 @app.post("/sales", response_model=SaleGetMap)
-def create_sale(json_sale_obj: SalePostMap):
+def create_sale(json_sale_obj: SalePostMap, db: Session = Depends(get_db)):
     model_obj=Sale(
         product_id=json_sale_obj.product_id,
         quantity=json_sale_obj.quantity
     )
-    SessionLocal.add(model_obj)
-    SessionLocal.commit()
+    db.add(model_obj)
+    db.commit()
+    db.refresh(model_obj)
     return model_obj
 
 
 @app.get("/purchases",response_model=List[PurchaseGetMap])
 def get_purchases(
-     current_user: Annotated[User, Depends(get_current_user)]
+     current_user: Annotated[User, Depends(get_current_user)],
+     db: Session = Depends(get_db)
 ):
     purchases=select(Purchase)
-    return SessionLocal.scalars(purchases).all()
+    return db.scalars(purchases).all()
 
 
 @app.post("/purchases", response_model=PurchaseGetMap)
-def create_purchase(json_purchase_obj: PurchasePostMap):
+def create_purchase(json_purchase_obj: PurchasePostMap, db: Session = Depends(get_db)):
     model_obj=Purchase(
         product_id=json_purchase_obj.product_id,
         stock_quantity=json_purchase_obj.stock_quantity,
         created_at=json_purchase_obj.created_at
     )
-    SessionLocal.add(model_obj)
-    SessionLocal.commit()
+    db.add(model_obj)
+    db.commit()
+    db.refresh(model_obj)
     return model_obj
 
 @app.get("/dashboard/spp",response_model=SalesPerProduct)
 def get_sales_per_product(
-     current_user: Annotated[User, Depends(get_current_user)]
+     current_user: Annotated[User, Depends(get_current_user)],
+     db: Session = Depends(get_db)
 ):
-    sales_data = SessionLocal.execute(
+    sales_data = db.execute(
         select(
             Sale.product_id,
             Product.name.label("product_name"),
@@ -214,7 +239,8 @@ def get_sales_per_product(
 
 @app.get("/dashboard/rspp",response_model=List[StockPerProduct])
 def get_stock_per_product(
-     current_user: Annotated[User, Depends(get_current_user)]
+     current_user: Annotated[User, Depends(get_current_user)],
+     db: Session = Depends(get_db)
 ):
     sales_subquery = (
         select(
@@ -232,7 +258,7 @@ def get_stock_per_product(
         .subquery()
     )
 
-    stock_data = SessionLocal.execute(
+    stock_data = db.execute(
         select(
             Product.id.label("product_id"),
             Product.name.label("product_name"),
@@ -254,9 +280,10 @@ def get_stock_per_product(
 
 @app.get("/dashboard/profit-per-product",response_model=List[ProfitPerProduct])
 def get_profit_per_product(
-     current_user: Annotated[User, Depends(get_current_user)]
+     current_user: Annotated[User, Depends(get_current_user)],
+     db: Session = Depends(get_db)
 ):
-    profit_data = SessionLocal.execute(
+    profit_data = db.execute(
         select(
             Sale.product_id,
             Product.name.label("product_name"),
@@ -278,9 +305,10 @@ def get_profit_per_product(
 
 @app.get("/dashboard/profit-per-day",response_model=List[ProfitPerDay])
 def get_profit_per_day(
-     current_user: Annotated[User, Depends(get_current_user)]
+     current_user: Annotated[User, Depends(get_current_user)],
+     db: Session = Depends(get_db)
 ):
-    profit_data = SessionLocal.execute(
+    profit_data = db.execute(
         select(
             func.date(Sale.created_at).label("date"),
             func.sum(Sale.quantity * (Product.selling_price - Product.buying_price)).label("total_profit")
@@ -301,9 +329,10 @@ def get_profit_per_day(
 
 @app.get("/dashboard/profit-per-product-per-day",response_model=List[ProfitPerProductPerDay])
 def get_profit_per_product_per_day(
-     current_user: Annotated[User, Depends(get_current_user)]
+     current_user: Annotated[User, Depends(get_current_user)],
+     db: Session = Depends(get_db)
 ):
-    profit_data = SessionLocal.execute(
+    profit_data = db.execute(
         select(
             func.date(Sale.created_at).label("date"),
             Sale.product_id,
@@ -327,7 +356,7 @@ def get_profit_per_product_per_day(
     return result
 
 @app.post("/stk-push")
-def stk_push(payload: dict):
+def stk_push(payload: dict, db: Session = Depends(get_db)):
     try:
         response_data = make_stk_push(payload)
         
@@ -339,17 +368,17 @@ def stk_push(payload: dict):
             crid=response_data.get('CheckoutRequestID'),
             status="pending"
         )
-        SessionLocal.add(new_payment)
-        SessionLocal.commit()
+        db.add(new_payment)
+        db.commit()
 
         return {"message": "STK Push initiated", "response": response_data}
     except Exception as e:
-        SessionLocal.rollback()
+        db.rollback()
         print("STK Push error: ", e)
         return {"message": f"STK Push failed: {str(e)}"}
     
 @app.post("/saf-callback")
-def saf_callback(payload: dict):
+def saf_callback(payload: dict, db: Session = Depends(get_db)):
     print("Received SAF callback:", payload)
     try:
         body = payload.get('Body', {})
@@ -359,7 +388,7 @@ def saf_callback(payload: dict):
         mrid = stkCallback.get('MerchantRequestID')
         crid = stkCallback.get('CheckoutRequestID')
 
-        payment = SessionLocal.execute(
+        payment = db.execute(
             select(Payment).where(Payment.mrid == mrid, Payment.crid == crid)
         ).scalar_one_or_none()
 
@@ -370,24 +399,31 @@ def saf_callback(payload: dict):
                     if item.get('Name') == 'MpesaReceiptNumber':
                         payment.trans_code = item.get('Value')
                 payment.status = "completed"
-                details = f"Payment of {payment.trans_amount} from {payment.phone_paid}\n was successful. Transaction code: {payment.trans_code} for sale ID: {payment.sale_id}\n at {payment.created_at}\n Thank you for your purchase!"
-                generate_receipt(details,payment.trans_code)
-
-
             else:
                 payment.status = "failed"
             
-            SessionLocal.commit()
+            # Commit payment status FIRST — this is critical
+            db.commit()
+
+            # Then attempt receipt generation (non-critical)
+            if result_code == 0:
+                try:
+                    details = f"Payment of {payment.trans_amount} from {payment.phone_paid}\n was successful. Transaction code: {payment.trans_code} for sale ID: {payment.sale_id}\n at {payment.created_at}\n Thank you for your purchase!"
+                    generate_receipt(details, payment.trans_code)
+                except Exception as receipt_err:
+                    print("Receipt generation failed (non-critical):", receipt_err)
         else:
             print(f"Payment not found for MRID: {mrid} and CRID: {crid}")
             
     except Exception as e:
         print("Error processing callback:", e)
-        SessionLocal.rollback()
+        db.rollback()
 
     return {"message": "Callback received"}
 
 @app.get("/payments", response_model=List[PaymentGetMap])
-def get_payments():
-    payments = select(Payment)
-    return SessionLocal.scalars(payments).all()
+def get_payments(sale_id: Optional[int] = None, db: Session = Depends(get_db)):
+    query = select(Payment)
+    if sale_id:
+        query = query.where(Payment.sale_id == sale_id)
+    return db.scalars(query).all()

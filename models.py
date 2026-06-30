@@ -5,23 +5,36 @@ from sqlalchemy import String
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import relationship,Session
+from sqlalchemy.orm import relationship,Session,sessionmaker
 from datetime import datetime
 
-
 from sqlalchemy import create_engine
-DATABASE_URL='postgresql://postgres:Nazo@localhost:5432/flaskapi'
+DATABASE_URL="postgresql://postgres:Nazo@my_postgres:5432/flaskapi"
+#DATABASE_URL = "sqlite:///./pos.db"
 
 
 engine = create_engine(
     DATABASE_URL
-)
+) 
 
-SessionLocal = Session(
+""" engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False}
+) """
+
+SessionFactory = sessionmaker(
     autocommit=False,
     autoflush=False,
     bind=engine
 )
+
+def get_db():
+    """Create a new session per request."""
+    db = SessionFactory()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 class Base(DeclarativeBase):
@@ -53,8 +66,8 @@ class Sale(Base):
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     quantity: Mapped[int] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-
     product: Mapped["Product"] = relationship(back_populates="sales")
+    payment: Mapped[Optional["Payment"]] = relationship(back_populates="sale", uselist=False)
 
 class Purchase(Base):
     __tablename__ = "purchases"
@@ -78,4 +91,5 @@ class Payment(Base):
     phone_paid: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    sale: Mapped[Optional["Sale"]] = relationship(back_populates="payment")
 
