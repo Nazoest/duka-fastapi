@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
-from models import User, SessionLocal
+from models import User, SessionFactory
 from jsonmap import TokenData
 from sqlalchemy import select
 from jose import JWTError, jwt
@@ -27,9 +27,13 @@ def get_password_hash(password):
 
 
 def get_user(email: str):
-    return SessionLocal.execute(
-        select(User).where(User.email == email)
-    ).scalar_one_or_none()
+    db = SessionFactory()
+    try:
+        return db.execute(
+            select(User).where(User.email == email)
+        ).scalar_one_or_none()
+    finally:
+        db.close()
 
 
 
