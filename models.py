@@ -9,7 +9,8 @@ from sqlalchemy.orm import relationship,Session,sessionmaker
 from datetime import datetime
 
 from sqlalchemy import create_engine
-DATABASE_URL="postgresql://postgres:Nazo@my_postgres:5432/flaskapi"
+#DATABASE_URL="postgresql://postgres:Nazo@my_postgres:5432/flaskapi"
+DATABASE_URL = "postgresql://postgres:Nazo@postgres-db:5432/flaskapi"
 #DATABASE_URL = "sqlite:///./pos.db"
 
 
