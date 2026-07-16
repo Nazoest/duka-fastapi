@@ -16,10 +16,16 @@ from fastapi.security import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from mpesa import make_stk_push
+import sentry_sdk
 
+sentry_sdk.init(
+    dsn="https://cc22633e79a9088c3613da8b1e723394@o4510538828349440.ingest.us.sentry.io/4511746120548352",
+    # Add data like request headers and IP for users,
+    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+    send_default_pii=True,
+)
 
 app = FastAPI()
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,6 +45,10 @@ def create_tables():
 @app.get("/")
 def read_root():
     return {"Duka FastAPI": "Version 1.0"}
+
+@app.get("/sentry-debug")
+async def trigger_error():
+    division_by_zero = 1 / 0
 
 # ---------------- LOGIN (OAUTH2 – SWAGGER) ----------------
 @app.post("/token", tags=["auth"])
