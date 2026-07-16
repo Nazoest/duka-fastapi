@@ -11,7 +11,7 @@ consumer_secret = "GbGs11P8Hf4aBWGkNh0vtREeeslAAOQLADv9YECW8ySo3gGAMzvo9q6qzThq9
 saf_short_code = "174379"
 SAF_STK_PUSH_API="https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
 saf_passkey="bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919"
-my_callback_url = "https://decay-unstirred-phony.ngrok-free.dev/saf-callback"
+my_callback_url = "https://www.amarahauscollections.co.ke/saf-callback"
 
 def get_mpesa_access_token():
     try:
